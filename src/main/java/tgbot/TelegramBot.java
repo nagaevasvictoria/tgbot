@@ -5,26 +5,41 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+
 /**
  * Бот, который обрабатывает сообщения пользователей
  */
 public class TelegramBot extends TelegramLongPollingBot {
+    /**
+     * Логика диалога бота
+     */
+    private final BotLogic botLogic;
 
-    private final Dotenv dotenv = Dotenv.load();
-    private final BotLogic botLogic = new BotLogic();
+    /**
+     * Создаёт объект Telegram-бота и передаёт токен родительскому классу
+     */
+    public TelegramBot() {
+        super(Dotenv.load().get("BOT_TOKEN"));
+        botLogic = new BotLogic(new SessionStorage(), new RecipeRepository(), new IngredientParser());
+    }
 
+    /**
+     * Обрабатывает команды и текстовые сообщения пользователей
+     *
+     * @param update входящее обновление от Telegram
+     */
     @Override
     public void onUpdateReceived(Update update) {
         if (!update.hasMessage() || !update.getMessage().hasText()) {
             return;
         }
-
         String text = update.getMessage().getText();
-        String answer = botLogic.botMessage(text);
-        String chatId = update.getMessage().getChatId().toString();
+        long chatId = update.getMessage().getChatId();
+        String answer = botLogic.handle(chatId, text);
 
-        sendMessage(chatId,answer);
+        sendMessage(String.valueOf(chatId), answer);
     }
+
     /**
      * Отправляет сообщение в указанный чат
      * @param chatId идентификатор чата
@@ -45,13 +60,13 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
+    /**
+     * Возвращает имя бота из настроек
+     *
+     * @return имя бота
+     */
     @Override
     public String getBotUsername() {
-        return dotenv.get("BOT_USERNAME");
-    }
-
-    @Override
-    public String getBotToken() {
-        return dotenv.get("BOT_TOKEN");
+        return Dotenv.load().get("BOT_USERNAME");
     }
 }
