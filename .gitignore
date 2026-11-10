@@ -1,6 +1,14 @@
+# Секреты
+.env
+
+# Сборка Maven
 target/
+
+# IntelliJ IDEA
 .idea/
 *.iml
-.vscode/
+out/
+
+# Системные файлы
 .DS_Store
-.env
+Thumbs.db
