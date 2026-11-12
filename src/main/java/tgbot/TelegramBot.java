@@ -12,9 +12,14 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 public class TelegramBot extends TelegramLongPollingBot {
 
     /**
-     * Имя файла базы данных с рецептами.
+     * Имя файла с рецептами.
      */
-    private static final String DATABASE_FILE = "recipes.db";
+    private static final String RECIPES_FILE = "recipes.json";
+
+    /**
+     * Настройки из файла .env, загружаются один раз.
+     */
+    private static final Dotenv DOTENV = Dotenv.load();
 
     /**
      * Логика диалога бота.
@@ -25,10 +30,10 @@ public class TelegramBot extends TelegramLongPollingBot {
      * Создаёт объект Telegram-бота и передаёт токен родительскому классу.
      */
     public TelegramBot() {
-        super(Dotenv.load().get("BOT_TOKEN"));
+        super(DOTENV.get("BOT_TOKEN"));
         botLogic = new BotLogic(
                 new SessionStorage(),
-                new RecipeRepository(DATABASE_FILE),
+                new RecipeRepository(RECIPES_FILE),
                 new IngredientReader());
     }
 
@@ -77,6 +82,6 @@ public class TelegramBot extends TelegramLongPollingBot {
      */
     @Override
     public String getBotUsername() {
-        return Dotenv.load().get("BOT_USERNAME");
+        return DOTENV.get("BOT_USERNAME");
     }
 }

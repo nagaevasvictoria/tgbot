@@ -1,115 +1,267 @@
 package tgbot;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-/** Проверяет хранилище рецептов. */
-class RecipeRepositoryTest {
-    /** Рецепт одного пользователя недоступен другому. */
-    @Test
-    void shouldKeepCollectionsSeparate() {
-        RecipeRepository repository = new RecipeRepository();
-        Recipe recipe = repository.add(1, "Паста", List.of("сыр"), "Сварить");
+/**
+ * Тесты для хранилища рецептов.
+ */
+public class RecipeRepositoryTest {
 
-        Assertions.assertTrue(repository.find(1, recipe.getId()).isPresent());
-        Assertions.assertTrue(repository.find(2, recipe.getId()).isEmpty());
-        Assertions.assertTrue(repository.findAll(2).isEmpty());
+    /**
+     * Идентификатор первого пользователя.
+     */
+    private static final long USER_ID = 1;
+
+    /**
+     * Идентификатор второго пользователя.
+     */
+    private static final long OTHER_USER_ID = 2;
+
+    /**
+     * Хранилище в памяти, создаётся заново перед каждым тестом.
+     */
+    private RecipeRepository repository;
+
+    /**
+     * Создаёт чистое хранилище перед каждым тестом.
+     */
+    @BeforeEach
+    void setUp() {
+        repository = new RecipeRepository();
     }
 
-    /** Название ищется без учёта регистра и только у своего пользователя. */
+    /**
+     * Тестирование того, что у разных пользователей отдельные рецепты и своя нумерация.
+     */
     @Test
-    void shouldFindByNameIgnoringCase() {
-        RecipeRepository repository = new RecipeRepository();
-        repository.add(1, "Паста с сыром", List.of("сыр"), "Сварить");
+    void testUsersHaveSeparateRecipesAndNumbers() {
+        repository.add(USER_ID, "Борщ", List.of("свёкла"), "Варить");
+        repository.add(USER_ID, "Щи", List.of("капуста"), "Тушить");
 
-        Assertions.assertTrue(repository.findByName(1, "паста с сыром").isPresent());
-        Assertions.assertTrue(repository.findByName(2, "паста с сыром").isEmpty());
-    }
+        Recipe other = repository.add(OTHER_USER_ID, "Окрошка", List.of("квас"), "Смешать");
 
-    /** Обновление меняет данные, но сохраняет ID. */
-    @Test
-    void shouldKeepIdOnUpdate() {
-        RecipeRepository repository = new RecipeRepository();
-        Recipe recipe = repository.add(1, "Паста", List.of("сыр"), "Сварить");
-
-        repository.update(1, recipe.getId(), "Борщ", List.of("свёкла"), "Варить");
-
-        Recipe updated = repository.find(1, recipe.getId()).orElseThrow();
-        Assertions.assertEquals("Борщ", updated.getName());
-        Assertions.assertEquals(recipe.getId(), updated.getId());
-    }
-
-    /** У каждого пользователя нумерация начинается с 1. */
-    @Test
-    void shouldNumberFromOneForEachUser() {
-        RecipeRepository repository = new RecipeRepository();
-        Recipe first = repository.add(1, "Паста", List.of("сыр"), "Сварить");
-        Recipe second = repository.add(1, "Омлет", List.of("яйца"), "Пожарить");
-        Recipe other = repository.add(2, "Борщ", List.of("свёкла"), "Варить");
-
-        Assertions.assertEquals(1, first.getId());
-        Assertions.assertEquals(2, second.getId());
         Assertions.assertEquals(1, other.getId());
+        Assertions.assertEquals(1, repository.findAll(OTHER_USER_ID).size());
+        Assertions.assertNull(repository.find(OTHER_USER_ID, 2));
+        Assertions.assertNull(repository.findByName(OTHER_USER_ID, "Борщ"));
     }
 
-    /** После удаления рецепта следующие сдвигаются, нумерация идёт без пропусков. */
+    /**
+     * Тестирование удаления из середины списка: номера следующих рецептов сдвигаются.
+     */
     @Test
-    void shouldRenumberAfterRemove() {
-        RecipeRepository repository = new RecipeRepository();
-        repository.add(1, "Первый", List.of("а"), "1");
-        repository.add(1, "Второй", List.of("б"), "2");
-        repository.add(1, "Третий", List.of("в"), "3");
-        repository.add(1, "Четвёртый", List.of("г"), "4");
+    void testRemoveShiftsNumbers() {
+        repository.add(USER_ID, "Борщ", List.of("свёкла"), "Варить");
+        repository.add(USER_ID, "Щи", List.of("капуста"), "Тушить");
+        repository.add(USER_ID, "Окрошка", List.of("квас"), "Смешать");
 
-        repository.remove(1, 2);
+        repository.remove(USER_ID, 2);
 
-        List<Recipe> all = repository.findAll(1);
-        Assertions.assertEquals(3, all.size());
-        Assertions.assertEquals("Первый", repository.find(1, 1).orElseThrow().getName());
-        Assertions.assertEquals("Третий", repository.find(1, 2).orElseThrow().getName());
-        Assertions.assertEquals("Четвёртый", repository.find(1, 3).orElseThrow().getName());
-        Assertions.assertEquals(2, all.get(1).getId());
-        Assertions.assertEquals(3, all.get(2).getId());
-        Assertions.assertTrue(repository.find(1, 4).isEmpty());
+        Assertions.assertEquals(2, repository.findAll(USER_ID).size());
+        Assertions.assertEquals("Борщ", repository.find(USER_ID, 1).getName());
+        Assertions.assertEquals("Окрошка", repository.find(USER_ID, 2).getName());
+        Assertions.assertEquals(2, repository.find(USER_ID, 2).getId());
+        Assertions.assertNull(repository.find(USER_ID, 3));
     }
 
-    /** После удаления единственного рецепта следующий снова получает номер 1. */
+    /**
+     * Тестирование удаления первого, последнего и единственного рецепта.
+     */
     @Test
-    void shouldReuseNumberOneAfterRemovingOnlyRecipe() {
-        RecipeRepository repository = new RecipeRepository();
-        Recipe first = repository.add(1, "Паста", List.of("сыр"), "Сварить");
-        repository.remove(1, first.getId());
+    void testRemoveFirstAndLast() {
+        repository.add(USER_ID, "Борщ", List.of("свёкла"), "Варить");
+        repository.add(USER_ID, "Щи", List.of("капуста"), "Тушить");
+        repository.add(USER_ID, "Окрошка", List.of("квас"), "Смешать");
 
-        Recipe second = repository.add(1, "Омлет", List.of("яйца"), "Пожарить");
+        repository.remove(USER_ID, 1);
 
-        Assertions.assertTrue(repository.find(1, 2).isEmpty());
-        Assertions.assertEquals(1, second.getId());
+        Assertions.assertEquals("Щи", repository.find(USER_ID, 1).getName());
+        Assertions.assertEquals(1, repository.find(USER_ID, 1).getId());
+        Assertions.assertEquals("Окрошка", repository.find(USER_ID, 2).getName());
+        Assertions.assertEquals(2, repository.find(USER_ID, 2).getId());
+
+        repository.remove(USER_ID, 2);
+        Assertions.assertEquals(1, repository.findAll(USER_ID).size());
+
+        repository.remove(USER_ID, 1);
+        Assertions.assertTrue(repository.findAll(USER_ID).isEmpty());
+        Assertions.assertEquals(1,
+                repository.add(USER_ID, "Солянка", List.of("колбаса"), "Варить").getId());
     }
 
-    /** Удаление у одного пользователя не затрагивает рецепты другого. */
+    /**
+     * Тестирование того, что новый рецепт после удаления получает следующий номер списка.
+     */
     @Test
-    void shouldNotAffectOtherUserOnRemove() {
-        RecipeRepository repository = new RecipeRepository();
-        repository.add(1, "Паста", List.of("сыр"), "Сварить");
-        repository.add(2, "Борщ", List.of("свёкла"), "Варить");
+    void testNewRecipeAfterRemoveGetsNextNumber() {
+        repository.add(USER_ID, "Борщ", List.of("свёкла"), "Варить");
+        repository.add(USER_ID, "Щи", List.of("капуста"), "Тушить");
+        repository.add(USER_ID, "Окрошка", List.of("квас"), "Смешать");
+        repository.remove(USER_ID, 2);
 
-        repository.remove(1, 1);
+        Recipe added = repository.add(USER_ID, "Солянка", List.of("колбаса"), "Варить");
 
-        Assertions.assertTrue(repository.findAll(1).isEmpty());
-        Assertions.assertEquals("Борщ", repository.find(2, 1).orElseThrow().getName());
+        Assertions.assertEquals(3, added.getId());
     }
 
-    /** Удаление несуществующего рецепта ничего не ломает. */
+    /**
+     * Тестирование того, что при обновлении меняются данные, а номер сохраняется.
+     */
     @Test
-    void shouldIgnoreRemoveOfMissingRecipe() {
-        RecipeRepository repository = new RecipeRepository();
-        repository.add(1, "Паста", List.of("сыр"), "Сварить");
+    void testUpdateKeepsNumber() {
+        repository.add(USER_ID, "Борщ", List.of("свёкла"), "Варить");
 
-        repository.remove(1, 5);
-        repository.remove(1, 0);
-        repository.remove(3, 1);
+        repository.update(USER_ID, 1, "Щи", List.of("капуста"), "Тушить");
 
-        Assertions.assertEquals(1, repository.findAll(1).size());
+        Recipe updated = repository.find(USER_ID, 1);
+        Assertions.assertEquals(1, updated.getId());
+        Assertions.assertEquals("Щи", updated.getName());
+        Assertions.assertEquals(List.of("капуста"), updated.getIngredients());
+        Assertions.assertEquals("Тушить", updated.getInstruction());
+    }
+
+    /**
+     * Тестирование поиска по названию без учёта регистра: по нему бот
+     * не даёт создать два рецепта с одинаковым названием.
+     */
+    @Test
+    void testFindByNameIgnoresCase() {
+        repository.add(USER_ID, "Борщ", List.of("свёкла"), "Варить");
+
+        Assertions.assertNotNull(repository.findByName(USER_ID, "бОрЩ"));
+        Assertions.assertNull(repository.findByName(USER_ID, "Щи"));
+    }
+
+    /**
+     * Тестирование того, что рецепты нескольких пользователей читаются из файла после перезапуска.
+     */
+    @Test
+    void testRecipesSurviveRestart(@TempDir Path dir) {
+        String file = dir.resolve("recipes.json").toString();
+        RecipeRepository first = new RecipeRepository(file);
+        first.add(USER_ID, "Борщ", List.of("свёкла", "2,5 л воды"), "Варить час");
+        first.add(OTHER_USER_ID, "Щи", List.of("капуста"), "Тушить");
+
+        RecipeRepository second = new RecipeRepository(file);
+
+        Recipe borsch = second.find(USER_ID, 1);
+        Assertions.assertEquals("Борщ", borsch.getName());
+        Assertions.assertEquals(List.of("свёкла", "2,5 л воды"), borsch.getIngredients());
+        Assertions.assertEquals("Варить час", borsch.getInstruction());
+        Assertions.assertEquals("Щи", second.find(OTHER_USER_ID, 1).getName());
+    }
+
+    /**
+     * Тестирование того, что обновление и удаление сохраняются в файл,
+     * а нумерация после перезапуска продолжается.
+     */
+    @Test
+    void testUpdateAndRemoveAreSaved(@TempDir Path dir) {
+        String file = dir.resolve("recipes.json").toString();
+        RecipeRepository first = new RecipeRepository(file);
+        first.add(USER_ID, "Борщ", List.of("свёкла"), "Варить");
+        first.add(USER_ID, "Щи", List.of("капуста"), "Тушить");
+        first.add(USER_ID, "Окрошка", List.of("квас"), "Смешать");
+        first.update(USER_ID, 1, "Солянка", List.of("колбаса"), "Варить");
+        first.remove(USER_ID, 2);
+
+        RecipeRepository second = new RecipeRepository(file);
+
+        Assertions.assertEquals("Солянка", second.find(USER_ID, 1).getName());
+        Assertions.assertEquals("Окрошка", second.find(USER_ID, 2).getName());
+        Assertions.assertEquals(2, second.find(USER_ID, 2).getId());
+        Assertions.assertNull(second.find(USER_ID, 3));
+        Assertions.assertEquals(3,
+                second.add(USER_ID, "Рассольник", List.of("огурцы"), "Варить").getId());
+    }
+
+    /**
+     * Тестирование первого запуска: файла ещё нет, хранилище пустое.
+     */
+    @Test
+    void testMissingFileGivesEmptyRepository(@TempDir Path dir) {
+        RecipeRepository fresh = new RecipeRepository(dir.resolve("recipes.json").toString());
+
+        Assertions.assertTrue(fresh.findAll(USER_ID).isEmpty());
+    }
+
+    /**
+     * Тестирование пустого файла: хранилище пустое.
+     */
+    @Test
+    void testEmptyFileGivesEmptyRepository(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("recipes.json");
+        Files.writeString(file, "");
+
+        RecipeRepository fresh = new RecipeRepository(file.toString());
+
+        Assertions.assertTrue(fresh.findAll(USER_ID).isEmpty());
+    }
+
+    /**
+     * Тестирование того, что текст, который вводят пользователи (кавычки, переносы
+     * строк, эмодзи), после записи и чтения не меняется.
+     */
+    @Test
+    void testFreeTextSurvivesRestart(@TempDir Path dir) {
+        String file = dir.resolve("recipes.json").toString();
+        String name = "Борщ \"по-домашнему\"";
+        String instruction = "Шаг 1: нарезать\nШаг 2: варить \"до готовности\" 🍲";
+        new RecipeRepository(file).add(USER_ID, name, List.of("соль"), instruction);
+
+        Recipe loaded = new RecipeRepository(file).find(USER_ID, 1);
+
+        Assertions.assertEquals(name, loaded.getName());
+        Assertions.assertEquals(instruction, loaded.getInstruction());
+    }
+
+    /**
+     * Тестирование повреждённого файла: запуск завершается ошибкой, а файл не меняется,
+     * чтобы следующее сохранение не затёрло остатки данных.
+     */
+    @Test
+    void testCorruptedFileIsNotTreatedAsEmpty(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("recipes.json");
+        String broken = "{\"1\": [{\"id\": 1,";
+        Files.writeString(file, broken);
+
+        Assertions.assertThrows(RuntimeException.class,
+                () -> new RecipeRepository(file.toString()));
+
+        Assertions.assertEquals(broken, Files.readString(file));
+    }
+
+    /**
+     * Тестирование файла с устаревшими номерами (пропуски после удалений): при чтении
+     * номера приводятся к позициям, а новый рецепт не получает уже занятый номер.
+     */
+    @Test
+    void testStaleNumbersInFileAreRenumbered(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("recipes.json");
+        Files.writeString(file, """
+                {
+                  "1": [
+                    {"id": 1, "name": "Борщ", "ingredients": ["свёкла"], "instruction": "Варить"},
+                    {"id": 3, "name": "Щи", "ingredients": ["капуста"], "instruction": "Тушить"},
+                    {"id": 4, "name": "Окрошка", "ingredients": ["квас"], "instruction": "Смешать"},
+                    {"id": 5, "name": "Солянка", "ingredients": ["колбаса"], "instruction": "Варить"}
+                  ]
+                }""");
+
+        RecipeRepository loaded = new RecipeRepository(file.toString());
+
+        for (int number = 1; number <= 4; number++) {
+            Assertions.assertEquals(number, loaded.find(USER_ID, number).getId());
+        }
+        Recipe added = loaded.add(USER_ID, "Рассольник", List.of("огурцы"), "Варить");
+        Assertions.assertEquals(5, added.getId());
+        Assertions.assertEquals(5, loaded.findAll(USER_ID).size());
     }
 }

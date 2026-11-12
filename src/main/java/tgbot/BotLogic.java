@@ -1,7 +1,6 @@
 package tgbot;
 
 import java.util.List;
-import java.util.Optional;
 
 /** Логика диалога: принимает сообщение пользователя и формирует ответ бота. */
 public class BotLogic {
@@ -91,10 +90,10 @@ public class BotLogic {
         if (name.isEmpty()) {
             return "Укажите название: /add <название>";
         }
-        Optional<Recipe> existing = recipes.findByName(chatId, name);
-        if (existing.isPresent()) {
-            return "Рецепт «" + existing.get().getName() + "» уже есть в вашей книге (ID: "
-                    + existing.get().getId() + "). Чтобы создать новый, выберите другое название "
+        Recipe existing = recipes.findByName(chatId, name);
+        if (existing != null) {
+            return "Рецепт «" + existing.getName() + "» уже есть в вашей книге (ID: "
+                    + existing.getId() + "). Чтобы создать новый, выберите другое название "
                     + "или сначала удалите старый командой /delete <id>.";
         }
         session.startAdd(name);
@@ -115,7 +114,7 @@ public class BotLogic {
     private String receiveInstruction(long chatId, DialogSession session, String text) {
         Recipe recipe = recipes.add(chatId, session.getDraftName(), session.getDraftIngredients(), text);
         session.reset();
-        return "Рецепт «" + recipe.getName() + "» сохранён. ID: " + recipe.getId() + ".";
+        return "Рецепт «" + recipe.getName() + "» сохранён.";
     }
 
     /** Показывает список рецептов пользователя. */
@@ -136,11 +135,10 @@ public class BotLogic {
         if (idText.isEmpty()) {
             return "Укажите ID рецепта: /recipe <id>";
         }
-        Optional<Recipe> found = findOwn(chatId, idText);
-        if (found.isEmpty()) {
+        Recipe recipe = findOwn(chatId, idText);
+        if (recipe == null) {
             return notFound(idText);
         }
-        Recipe recipe = found.get();
         return recipe.getId() + ". " + recipe.getName()
                 + "\nИнгредиенты: " + String.join(", ", recipe.getIngredients())
                 + "\nИнструкция: " + recipe.getInstruction();
@@ -151,12 +149,12 @@ public class BotLogic {
         if (idText.isEmpty()) {
             return "Укажите ID рецепта: /delete <id>";
         }
-        Optional<Recipe> found = findOwn(chatId, idText);
-        if (found.isEmpty()) {
+        Recipe found = findOwn(chatId, idText);
+        if (found == null) {
             return notFound(idText);
         }
-        recipes.remove(chatId, found.get().getId());
-        return "Рецепт «" + found.get().getName() + "» удалён.";
+        recipes.remove(chatId, found.getId());
+        return "Рецепт «" + found.getName() + "» удалён.";
     }
 
     /** Начинает редактирование рецепта. */
@@ -164,25 +162,25 @@ public class BotLogic {
         if (idText.isEmpty()) {
             return "Укажите ID рецепта: /edit <id>";
         }
-        Optional<Recipe> found = findOwn(chatId, idText);
-        if (found.isEmpty()) {
+        Recipe found = findOwn(chatId, idText);
+        if (found == null) {
             return notFound(idText);
         }
-        session.startEdit(found.get().getId());
+        session.startEdit(found.getId());
         return "Введите новое название или «-», чтобы оставить прежнее.";
     }
 
     /** Принимает новое название рецепта. */
     private String receiveEditedName(long chatId, DialogSession session, String text) {
-        Optional<Recipe> recipe = recipes.find(chatId, session.getEditedId());
-        if (recipe.isEmpty()) {
+        Recipe recipe = recipes.find(chatId, session.getEditedId());
+        if (recipe == null) {
             session.reset();
             return "Рецепт больше не существует. Редактирование отменено.";
         }
-        String name = text.equals("-") ? recipe.get().getName() : text;
-        Optional<Recipe> sameName = recipes.findByName(chatId, name);
-        if (sameName.isPresent() && sameName.get().getId() != recipe.get().getId()) {
-            return "Рецепт «" + name + "» уже есть в вашей книге (ID: " + sameName.get().getId()
+        String name = text.equals("-") ? recipe.getName() : text;
+        Recipe sameName = recipes.findByName(chatId, name);
+        if (sameName != null && sameName.getId() != recipe.getId()) {
+            return "Рецепт «" + name + "» уже есть в вашей книге (ID: " + sameName.getId()
                     + "). Введите другое название или «-».";
         }
         session.setEditedName(name);
@@ -191,12 +189,12 @@ public class BotLogic {
 
     /** Принимает новые ингредиенты рецепта. */
     private String receiveEditedIngredients(long chatId, DialogSession session, String text) {
-        Optional<Recipe> recipe = recipes.find(chatId, session.getEditedId());
-        if (recipe.isEmpty()) {
+        Recipe recipe = recipes.find(chatId, session.getEditedId());
+        if (recipe == null) {
             session.reset();
             return "Рецепт больше не существует. Редактирование отменено.";
         }
-        List<String> ingredients = text.equals("-") ? recipe.get().getIngredients() : reader.read(text);
+        List<String> ingredients = text.equals("-") ? recipe.getIngredients() : reader.read(text);
         if (ingredients.isEmpty()) {
             return "Не вижу ингредиентов. Укажите их через запятую или «-».";
         }
@@ -206,24 +204,24 @@ public class BotLogic {
 
     /** Принимает новую инструкцию и сохраняет изменения. */
     private String receiveEditedInstruction(long chatId, DialogSession session, String text) {
-        Optional<Recipe> recipe = recipes.find(chatId, session.getEditedId());
-        if (recipe.isEmpty()) {
+        Recipe recipe = recipes.find(chatId, session.getEditedId());
+        if (recipe == null) {
             session.reset();
             return "Рецепт больше не существует. Редактирование отменено.";
         }
-        String instruction = text.equals("-") ? recipe.get().getInstruction() : text;
+        String instruction = text.equals("-") ? recipe.getInstruction() : text;
         String name = session.getDraftName();
-        recipes.update(chatId, recipe.get().getId(), name, session.getDraftIngredients(), instruction);
+        recipes.update(chatId, recipe.getId(), name, session.getDraftIngredients(), instruction);
         session.reset();
         return "Рецепт «" + name + "» обновлён.";
     }
 
-    /** Ищет рецепт только среди рецептов этого пользователя. */
-    private Optional<Recipe> findOwn(long chatId, String idText) {
+    /** Ищет рецепт только среди рецептов этого пользователя, null если ID не число или рецепта нет. */
+    private Recipe findOwn(long chatId, String idText) {
         try {
             return recipes.find(chatId, Integer.parseInt(idText));
         } catch (NumberFormatException e) {
-            return Optional.empty();
+            return null;
         }
     }
 
