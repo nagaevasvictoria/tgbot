@@ -2,14 +2,20 @@ package tgbot;
 
 import java.util.List;
 
-/** Рецепт пользователя. */
+/**
+ * Рецепт пользователя.
+ */
 public class Recipe {
+
     /** Уникальный идентификатор рецепта. */
     private final int id;
+
     /** Название рецепта. */
     private final String name;
+
     /** Список ингредиентов. */
     private final List<String> ingredients;
+
     /** Инструкция приготовления. */
     private final String instruction;
 
@@ -28,22 +34,30 @@ public class Recipe {
         this.instruction = instruction;
     }
 
-    /** @return идентификатор рецепта */
+    /**
+     * @return идентификатор рецепта
+     */
     public int getId() {
         return id;
     }
 
-    /** @return название рецепта */
+    /**
+     * @return название рецепта
+     */
     public String getName() {
         return name;
     }
 
-    /** @return ингредиенты рецепта */
+    /**
+     * @return ингредиенты рецепта
+     */
     public List<String> getIngredients() {
         return ingredients;
     }
 
-    /** @return инструкция приготовления */
+    /**
+     * @return инструкция приготовления
+     */
     public String getInstruction() {
         return instruction;
     }

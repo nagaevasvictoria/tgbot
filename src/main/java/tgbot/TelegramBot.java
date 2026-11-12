@@ -7,24 +7,33 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 /**
- * Бот, который обрабатывает сообщения пользователей
+ * Бот, который обрабатывает сообщения пользователей.
  */
 public class TelegramBot extends TelegramLongPollingBot {
+
     /**
-     * Логика диалога бота
+     * Имя файла базы данных с рецептами.
+     */
+    private static final String DATABASE_FILE = "recipes.db";
+
+    /**
+     * Логика диалога бота.
      */
     private final BotLogic botLogic;
 
     /**
-     * Создаёт объект Telegram-бота и передаёт токен родительскому классу
+     * Создаёт объект Telegram-бота и передаёт токен родительскому классу.
      */
     public TelegramBot() {
         super(Dotenv.load().get("BOT_TOKEN"));
-        botLogic = new BotLogic(new SessionStorage(), new RecipeRepository(), new IngredientParser());
+        botLogic = new BotLogic(
+                new SessionStorage(),
+                new RecipeRepository(DATABASE_FILE),
+                new IngredientReader());
     }
 
     /**
-     * Обрабатывает команды и текстовые сообщения пользователей
+     * Обрабатывает команды и текстовые сообщения пользователей.
      *
      * @param update входящее обновление от Telegram
      */
@@ -41,7 +50,8 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
 
     /**
-     * Отправляет сообщение в указанный чат
+     * Отправляет сообщение в указанный чат.
+     *
      * @param chatId идентификатор чата
      * @param text текст ответа
      */
@@ -61,7 +71,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
 
     /**
-     * Возвращает имя бота из настроек
+     * Возвращает имя бота из настроек.
      *
      * @return имя бота
      */

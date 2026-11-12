@@ -5,8 +5,6 @@ import java.util.Optional;
 
 /** Логика диалога: принимает сообщение пользователя и формирует ответ бота. */
 public class BotLogic {
-    /** Ответ, который при редактировании оставляет прежнее значение. */
-    private static final String KEEP = "-";
     /** Текст приветствия. */
     private static final String START_TEXT = "Это бот для хранения личных рецептов.\nСписок команд: /help.";
     /** Текст справки. */
@@ -17,26 +15,29 @@ public class BotLogic {
             /recipe <id> - показать рецепт
             /edit <id> - изменить рецепт
             /delete <id> - удалить рецепт
-            /help - показать эту инструкцию""";
+            /help - показать эту инструкцию
+
+            Ингредиенты пишите через запятую или с новой строки.
+            Дробные числа можно писать и через запятую, и через точку.""";
 
     /** Состояния диалогов пользователей. */
     private final SessionStorage sessions;
     /** Хранилище рецептов. */
     private final RecipeRepository recipes;
-    /** Разбор ингредиентов из текста. */
-    private final IngredientParser parser;
+    /** Чтение ингредиентов из текста. */
+    private final IngredientReader reader;
 
     /**
      * Создаёт логику бота с заданными зависимостями.
      *
      * @param sessions хранилище состояний диалогов
      * @param recipes хранилище рецептов
-     * @param parser разбор ингредиентов
+     * @param reader чтение ингредиентов
      */
-    public BotLogic(SessionStorage sessions, RecipeRepository recipes, IngredientParser parser) {
+    public BotLogic(SessionStorage sessions, RecipeRepository recipes, IngredientReader reader) {
         this.sessions = sessions;
         this.recipes = recipes;
-        this.parser = parser;
+        this.reader = reader;
     }
 
     /**
@@ -102,7 +103,7 @@ public class BotLogic {
 
     /** Принимает ингредиенты нового рецепта. */
     private String receiveIngredients(DialogSession session, String text) {
-        List<String> ingredients = parser.parse(text);
+        List<String> ingredients = reader.read(text);
         if (ingredients.isEmpty()) {
             return "Не вижу ингредиентов. Укажите их через запятую.";
         }
@@ -168,7 +169,7 @@ public class BotLogic {
             return notFound(idText);
         }
         session.startEdit(found.get().getId());
-        return "Введите новое название или «" + KEEP + "», чтобы оставить прежнее.";
+        return "Введите новое название или «-», чтобы оставить прежнее.";
     }
 
     /** Принимает новое название рецепта. */
@@ -178,14 +179,14 @@ public class BotLogic {
             session.reset();
             return "Рецепт больше не существует. Редактирование отменено.";
         }
-        String name = text.equals(KEEP) ? recipe.get().getName() : text;
+        String name = text.equals("-") ? recipe.get().getName() : text;
         Optional<Recipe> sameName = recipes.findByName(chatId, name);
         if (sameName.isPresent() && sameName.get().getId() != recipe.get().getId()) {
             return "Рецепт «" + name + "» уже есть в вашей книге (ID: " + sameName.get().getId()
-                    + "). Введите другое название или «" + KEEP + "».";
+                    + "). Введите другое название или «-».";
         }
         session.setEditedName(name);
-        return "Укажите ингредиенты через запятую или «" + KEEP + "», чтобы оставить прежние.";
+        return "Укажите ингредиенты через запятую или «-», чтобы оставить прежние.";
     }
 
     /** Принимает новые ингредиенты рецепта. */
@@ -195,12 +196,12 @@ public class BotLogic {
             session.reset();
             return "Рецепт больше не существует. Редактирование отменено.";
         }
-        List<String> ingredients = text.equals(KEEP) ? recipe.get().getIngredients() : parser.parse(text);
+        List<String> ingredients = text.equals("-") ? recipe.get().getIngredients() : reader.read(text);
         if (ingredients.isEmpty()) {
-            return "Не вижу ингредиентов. Укажите их через запятую или «" + KEEP + "».";
+            return "Не вижу ингредиентов. Укажите их через запятую или «-».";
         }
         session.setEditedIngredients(ingredients);
-        return "Введите инструкцию приготовления или «" + KEEP + "», чтобы оставить прежнюю.";
+        return "Введите инструкцию приготовления или «-», чтобы оставить прежнюю.";
     }
 
     /** Принимает новую инструкцию и сохраняет изменения. */
@@ -210,7 +211,7 @@ public class BotLogic {
             session.reset();
             return "Рецепт больше не существует. Редактирование отменено.";
         }
-        String instruction = text.equals(KEEP) ? recipe.get().getInstruction() : text;
+        String instruction = text.equals("-") ? recipe.get().getInstruction() : text;
         String name = session.getDraftName();
         recipes.update(chatId, recipe.get().getId(), name, session.getDraftIngredients(), instruction);
         session.reset();

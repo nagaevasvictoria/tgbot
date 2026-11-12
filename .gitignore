@@ -1,6 +1,12 @@
 # Секреты
 .env
 
+# База данных с рецептами пользователей
+recipes.db
+recipes.db-journal
+recipes.db-wal
+recipes.db-shm
+
 # Сборка Maven
 target/
 
